@@ -120,6 +120,9 @@ class Weather_Service:
             
             Returns None if the request fails.
         """
+        return None
+
+        
         try:
             cache_key = f"{latitude}_{longitude}"
 
