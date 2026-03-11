@@ -16,9 +16,10 @@ RUN pip3 install --no-cache-dir --break-system-packages \
     numpy \
     requests
 
-# Working directory matches the bind-mount layout:
-# host front-end/ -> container /app/
-# so front-end/testing/ is at /app/testing/
+# THE FIX: Copy all the files from your GitHub repo directly into the container's /app/ folder
+COPY . /app/
+
+# Working directory
 WORKDIR /app/testing
 
 EXPOSE 8080
