@@ -45,7 +45,7 @@ def _worker_init(api_version: str, log) -> None:
 
 
 process_pool = ProcessPoolExecutor(
-	max_workers=8,
+	max_workers=2,
 	initializer=_worker_init,
 	initargs=(API_VERSION, logger),
 )
