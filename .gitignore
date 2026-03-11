@@ -1,7 +1,8 @@
 *.xml
 *.csv
-*.json
+
 *.zip
+!nptg_naptan.db.zip
 *.db
 update.txt
 .idea
