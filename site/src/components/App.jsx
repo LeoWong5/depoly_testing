@@ -1,0 +1,19 @@
+import React, { useState, useEffect } from 'react'
+import './App.css'
+import TransportApp from './desktop/TransportApp'
+import MobileApp from './mobile/MobileApp'
+
+export default function App() {
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768)
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768)
+    }
+
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  return isMobile ? <MobileApp /> : <TransportApp />
+}

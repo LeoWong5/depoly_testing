@@ -1,0 +1,183 @@
+.app-container {
+  --app-shell-gutter-x: 12px;
+  --desktop-sidebar-column-width: clamp(292px, 30vw, 384px);
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background:
+    radial-gradient(circle at 0% 0%, #fff4db 0%, rgba(255, 244, 219, 0) 36%),
+    radial-gradient(circle at 100% 12%, #d8efff 0%, rgba(216, 239, 255, 0) 34%),
+    linear-gradient(180deg, #f7fafc 0%, #f2f6fb 100%);
+  font-family: 'Space Grotesk', 'IBM Plex Sans', 'Segoe UI', sans-serif;
+}
+
+.main-content {
+  display: grid;
+  grid-template-columns: var(--desktop-sidebar-column-width) minmax(0, 1fr);
+  flex: 1;
+  gap: 12px;
+  min-height: 0;
+  padding: 10px var(--app-shell-gutter-x) 12px;
+  box-sizing: border-box;
+}
+
+.desktop-sidebar {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid #d4dee9;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 10px 28px rgba(35, 57, 84, 0.12);
+  overflow: hidden;
+}
+
+.desktop-sidebar-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid #e3ebf4;
+  background: linear-gradient(180deg, rgba(243, 248, 254, 0.95) 0%, rgba(255, 255, 255, 0.9) 100%);
+}
+
+.desktop-sidebar-header-main {
+  min-width: 0;
+}
+
+.desktop-sidebar-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #1b3656;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.desktop-sidebar-subtitle {
+  margin-top: 4px;
+  font-size: 0.82rem;
+  color: #46617f;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.desktop-sidebar-reset {
+  border: 1px solid #ccdae9;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #274767;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.desktop-sidebar-reset:hover {
+  background: #f2f7fd;
+  border-color: #a9c0db;
+  color: #173553;
+}
+
+.desktop-sidebar-flow {
+  display: flex;
+  padding: 10px 14px;
+  border-bottom: 1px solid #e7eef7;
+  background: rgba(248, 251, 255, 0.9);
+  overflow: hidden;
+}
+
+.desktop-sidebar-step {
+  flex: 1;
+  position: relative;
+  text-align: center;
+  border: 1px solid #cedbe9;
+  color: #5d7691;
+  background: linear-gradient(180deg, #f6faff 0%, #ffffff 100%);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 7px 12px 7px 18px;
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%, 12px 50%);
+  z-index: 1;
+  margin-left: -10px;
+}
+
+.desktop-sidebar-step:first-child {
+  margin-left: 0;
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%);
+  padding-left: 12px;
+}
+
+.desktop-sidebar-step:last-child {
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 12px 50%);
+}
+
+.desktop-sidebar-step.active {
+  border-color: #285f96;
+  color: #ffffff;
+  background: linear-gradient(120deg, #2f70ad 0%, #1f5b97 100%);
+  box-shadow: 0 4px 12px rgba(31, 91, 151, 0.3);
+  z-index: 2;
+}
+
+.desktop-sidebar-content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.desktop-sidebar-content > * {
+  height: 100%;
+}
+
+.main-content .map-container {
+  border-radius: 16px;
+  border: 1px solid #d4dee9;
+  overflow: hidden;
+  box-shadow: 0 10px 26px rgba(35, 57, 84, 0.1);
+}
+
+@media (max-width: 1080px) {
+  .app-container {
+    --app-shell-gutter-x: 10px;
+    --desktop-sidebar-column-width: clamp(270px, 34vw, 328px);
+  }
+
+  .main-content {
+    grid-template-columns: var(--desktop-sidebar-column-width) minmax(0, 1fr);
+    gap: 10px;
+    padding: 8px var(--app-shell-gutter-x) 10px;
+  }
+
+  .desktop-sidebar-step {
+    font-size: 0.68rem;
+    padding: 6px 9px 6px 14px;
+  }
+
+  .desktop-sidebar-step:first-child {
+    padding-left: 10px;
+  }
+}
+
+@media (max-width: 920px) {
+  .app-container {
+    --desktop-sidebar-column-width: calc(100% - (var(--app-shell-gutter-x) * 2));
+  }
+
+  .main-content {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(320px, 44vh) minmax(0, 1fr);
+  }
+
+  .desktop-sidebar {
+    max-height: none;
+  }
+}

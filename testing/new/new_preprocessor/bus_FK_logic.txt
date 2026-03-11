@@ -1,0 +1,195 @@
+CSV_BUS Foreign Key Logic
+=========================
+Leo, 03 / 03 / 2026
+
+Key rules:
+  - "id" is like a local name from XML, duplicated across files — NEVER use as FK
+  - "uid" is the true globally unique key — ALWAYS use uid or index for FK
+  - Index-range FKs: parent stores (start_index, end_index), child rows in that
+    uid range [start_index .. end_index] belong to the parent
+  - Nullable sentinel: -1 means "no ref", "" (empty) means "no ref"
+  - Nullable columns discovered: #11 days_of_week_uid, #12 bho_uid,
+    #13 so_uid, #14 garage_uid, #28 route_location index, #30 SDO index,
+    #31 VJ_link index
+
+
+========================================================================
+  1. UID → UID  (direct foreign key: child.fk_col must exist in parent.uid)
+========================================================================
+
+#   Child Table                      FK Column                        → Parent Table                   PK Column   Nullable
+--  -------------------------------  -------------------------------  → ----------------------------   ---------   --------
+1   garage                           parent_operator_uid              → operator                       uid         no
+2   service                          operator_uid                     → operator                       uid         no
+3   line                             parent_service_uid               → service                        uid         no
+4   journey_pattern                  operator_uid                     → operator                       uid         no
+5   journey_pattern                  route_uid                        → route                          uid         no
+6   journey_pattern                  JP_section_start_uid             → journey_pattern_section         uid         no
+7   journey_pattern                  JP_section_end_uid               → journey_pattern_section         uid         no
+8   journey_pattern                  parent_service_uid               → service                        uid         no
+9   journey_pattern_link             route_link_uid                   → route_link                     uid         no
+10  vehicle_journey                  operator_uid                     → operator                       uid         no
+11  vehicle_journey                  days_of_week_uid                 → days_of_week                   uid         yes (-1 = no ref)
+12  vehicle_journey                  bank_holiday_operation_uid       → bank_holiday_operation          uid         yes (empty = no ref)
+13  vehicle_journey                  serviced_organisation_uid        → serviced_organisation           uid         yes (-1 = no ref)
+14  vehicle_journey                  garage_uid                       → garage                         uid         yes (-1 = no ref)
+15  vehicle_journey                  service_uid                      → service                        uid         no
+16  vehicle_journey                  line_uid                         → line                           uid         no
+17  vehicle_journey                  JP_uid                           → journey_pattern                uid         no
+18  vehicle_journey_link             parent_VJ_uid                    → vehicle_journey                uid         no
+19  vehicle_journey_link             JP_link_uid                      → journey_pattern_link            uid         no
+20  days_of_week                     parent_VJ_uid                    → vehicle_journey                uid         no
+21  special_days_operation           parent_VJ_uid                    → vehicle_journey                uid         no
+22  bank_holiday_operation           parent_VJ_uid                    → vehicle_journey                uid         no
+23  serviced_organisation_date_range organisation_uid                 → serviced_organisation           uid         no
+24  route_link                       from_bus_stop_point_uid          → bus_stop_point                 uid         no
+25  route_link                       to_bus_stop_point_uid            → bus_stop_point                 uid         no
+
+
+========================================================================
+  2. Index-Range FKs  (parent.start_index .. parent.end_index → child.uid)
+     All child rows with uid in [start_index, end_index] belong to parent
+========================================================================
+
+#   Parent Table            Start Column                          End Column                            → Child Table               Nullable
+--  ----------------------  ------------------------------------  ------------------------------------  → -----------------------   --------
+26  route                   route_section_start_index             route_section_end_index               → route_section              no
+27  route_section           start_route_link_index                end_route_link_index                  → route_link                 no
+28  route_link              start_route_location_index            end_route_location_index              → route_location             yes (-1 = no ref)
+29  journey_pattern_section start_JP_link_index                   end_JP_link_index                     → journey_pattern_link       no
+30  vehicle_journey         special_days_operation_start_index    special_days_operation_end_index      → special_days_operation     yes (empty = none)
+31  vehicle_journey         VJ_link_start_index                   VJ_link_end_index                     → vehicle_journey_link       yes (-1 = no ref)
+
+
+========================================================================
+  3. Stop-Point Ref FK  (atco_code based, not uid)
+     journey_pattern_link references bus_stop_point by stop_point_ref
+========================================================================
+
+#   Child Table              FK Column               → Parent Table       PK Column        Nullable
+--  -----------------------  ----------------------  → ----------------   --------------   --------
+32  journey_pattern_link     from_point_point_id     → bus_stop_point     stop_point_ref   no
+33  journey_pattern_link     to_point_point_id       → bus_stop_point     stop_point_ref   no
+
+
+========================================================================
+  4. Hierarchy / Dependency Graph
+========================================================================
+
+  operator  (root)
+    ├── garage
+    ├── service
+    │     └── line
+    ├── journey_pattern  → also refs route, journey_pattern_section, service
+    └─ (via vehicle_journey)
+
+  bus_stop_point  (root, refs NaPTAN stop_point by stop_point_ref)
+    └── route_link  (from/to_bus_stop_point_uid)
+
+  route  (root)
+    └── route_section  (index range)
+          └── route_link  (index range)
+                └── route_location  (index range)
+
+  journey_pattern_section  (parent = journey_pattern via JP_section_start/end_uid)
+    └── journey_pattern_link  (index range, also refs route_link by uid)
+
+  vehicle_journey  (refs operator, service, line, journey_pattern, garage)
+    ├── days_of_week            (parent_VJ_uid)
+    ├── special_days_operation  (index range, nullable)
+    ├── bank_holiday_operation  (parent_VJ_uid)
+    └── vehicle_journey_link    (index range, also refs journey_pattern_link by uid)
+
+  serviced_organisation  (root)
+    └── serviced_organisation_date_range  (organisation_uid)
+    └── vehicle_journey  (serviced_organisation_uid, nullable -1)
+
+
+========================================================================
+  5. Cross-Check with db.py  (database/db.py)
+========================================================================
+
+  db.py uses AUTOINCREMENT integer PKs (OPE_UID, SER_UID, etc.)
+  and proper relational FOREIGN KEY constraints.
+
+  Key architectural difference:
+    CSV uses index-range FKs  (parent stores start/end index)
+    db.py INVERTS these into child→parent direct FKs
+    (load_data.py must resolve index ranges when inserting)
+
+  ── Direct UID FKs: ALL MATCH ──────────────────────────────────────
+
+  CSV #   db.py table              db.py FK column        → db.py parent       Status
+  ------  -----------------------  ---------------------  → ------------------  ------
+  #1      Garage                   OPE_UID                → Operator            ✅
+  #2      Service                  OPE_UID                → Operator            ✅
+  #3      Line                     SER_UID                → Service             ✅
+  #4      Journey_Pattern          OPE_UID                → Operator            ✅
+  #5      Journey_Pattern          ROU_UID                → Route               ✅
+  #8      Journey_Pattern          SER_UID                → Service             ✅
+  #9      Journey_Pattern_Link     RLIN_UID               → Route_Link          ✅
+  #10     Vehicle_Journey          OPE_UID                → Operator            ✅
+  #13     Vehicle_Journey          SO_UID                 → Serviced_Org        ✅ (nullable)
+  #14     Vehicle_Journey          GAR_UID                → Garage              ✅
+  #15     Vehicle_Journey          SER_UID                → Service             ✅
+  #16     Vehicle_Journey          LIN_UID                → Line                ✅
+  #17     Vehicle_Journey          JP_UID                 → Journey_Pattern     ✅
+  #18     Vehicle_Journey_Link     VJ_UID                 → Vehicle_Journey     ✅
+  #19     Vehicle_Journey_Link     JPL_UID                → JP_Link             ✅
+  #20     Days_Of_Week             VJ_UID                 → Vehicle_Journey     ✅
+  #21     Special_Days_Operation   VJ_UID                 → Vehicle_Journey     ✅
+  #22     Bank_Holiday_Operation   VJ_UID                 → Vehicle_Journey     ✅
+  #23     Serviced_Org_Date_Range  SO_UID                 → Serviced_Org        ✅
+  #24     Route_Link               from_Bus_SP_uid        → Bus_Stop_Point      ✅
+  #25     Route_Link               to_Bus_SP_uid          → Bus_Stop_Point      ✅
+
+  ── Index-Range FKs: INVERTED in db.py ─────────────────────────────
+
+  CSV stores index range in parent → db.py stores parent UID in child
+
+  CSV #   CSV parent → child               db.py child.FK → parent          Status
+  ------  --------------------------------  ------------------------------   ------
+  #26     route → route_section             Route_Section.ROU_UID → Route   ✅ inverted
+  #27     route_section → route_link        Route_Link.RSEC_UID → R_Sec     ✅ inverted
+  #28     route_link → route_location       Route_Location.RLIN_UID → R_L   ✅ inverted
+  #29     JPS → journey_pattern_link        JP_Link.JPS_UID → JPS           ✅ inverted
+  #30     VJ → special_days_operation       SDO.VJ_UID → VJ                 ✅ inverted
+  #31     VJ → vehicle_journey_link         VJL.VJ_UID → VJ                 ✅ inverted
+
+  ── CSV #6,#7 (JP → JPS via start/end uid): INVERTED in db.py ─────
+
+  CSV:   journey_pattern.JP_section_start_uid → journey_pattern_section
+         journey_pattern.JP_section_end_uid   → journey_pattern_section
+  db.py: Journey_Pattern_Section.JP_UID       → Journey_Pattern         ✅ inverted
+
+  ── CSV #11,#12: NOT in db.py ──────────────────────────────────────
+
+  CSV #11: vehicle_journey.days_of_week_uid  → days_of_week
+  CSV #12: vehicle_journey.bank_holiday_operation_uid → bank_holiday_operation
+  db.py:   days_of_week.VJ_UID → Vehicle_Journey  (inverted, parent stores child)
+  db.py:   bank_holiday_operation.VJ_UID → Vehicle_Journey  (inverted)
+  These are 1:1 relationships — CSV points parent→child, db.py points child→parent.
+  Either direction works; db.py chose child→parent for consistency.      ✅ inverted
+
+  ── Cross-Domain FKs in db.py (bus → NaPTAN) ──────────────────────
+
+  These exist in db.py but NOT in the CSV (resolved at load time):
+
+  db.py table              db.py FK column             → NaPTAN table
+  -----------------------  --------------------------  → ------------------
+  Bus_Stop_Point           SP_atco_code                → Stop_Point (SP_atco_code)
+  Route_Link               from_SP_atco_code           → Stop_Point (SP_atco_code)
+  Route_Link               to_SP_atco_code             → Stop_Point (SP_atco_code)
+  Journey_Pattern_Link     JPL_from_point_atco_code    → Stop_Point (SP_atco_code)
+  Journey_Pattern_Link     JPL_to_point_atco_code      → Stop_Point (SP_atco_code)
+
+  Note: CSV #32/#33 (JPL.from/to_point_point_id → bus_stop_point.stop_point_ref)
+        covers the same relationship but within CSV_BUS scope only.
+        db.py extends this to reference the NaPTAN Stop_Point table directly.
+
+  ── Summary ────────────────────────────────────────────────────────
+
+  ALL 33 CSV FK relationships are accounted for in db.py.
+  No missing FKs.  No contradictions.
+  The only structural difference is index-range → child-stores-parent inversion,
+  which is the correct relational normalisation.

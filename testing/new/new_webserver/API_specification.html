@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title> Front-Back API Low-Level View </title>
+	<style>
+	body {
+		background-color:black;
+		color:white;
+		font-family: "Courier New", "Courier", "Liberation", "Source Code Pro", monospace, Arial, sans-serif;
+		font-size: 16px;
+	}
+
+	h1 {
+		font-size: 32px;
+	}
+	div.top {
+	}
+	div.tldr {
+		background-color: #353f55;
+		border-radius: 12px;
+		padding: 4%;
+		font-size: 1rem;
+	}
+
+	a {
+		color: orange;
+	}
+
+	.definitions table {
+		margin: 16px;
+	}
+	.definitions table, td, th {
+		border: 1px solid white;
+		border-collapse: collapse;
+		padding: 6px;
+	}
+
+	.definitions table td:first-child {
+		background-color: #2c0045;
+		font-size: 1.2rem;
+	}
+
+	.definitions table th {
+		font-size: 1.25rem;
+		padding-top: 0.5em;
+		padding-bottom: 0.5em;
+	}
+
+	.definitions .api {
+		width: 97%;
+		text-align: left;
+	}
+
+	.definitions .data-structures {
+		width: 97%;
+		text-align: left;
+		border: 1px solid;
+	}
+	
+	.definitions code {
+		background-color: #222222;
+		
+	}
+
+	.definitions em {
+		color: red;
+	}
+	.definitions com {
+		color: cyan;
+	}
+	
+	exc {
+		color: red;
+	}
+
+	</style>
+</head>
+<body>
+
+<div class='top'>
+
+	<h1>
+	The Front-Back API (Low-Level)
+	</h1>
+
+	<p>
+	This is a full low-level specification of the Transport app API for communication 
+	between the front end and the back end. The equivalent high-level specification is
+	on the design doc.
+	</p>
+
+</div>
+
+<div class='tldr'>
+	<h2> TLDR </h2>
+	<ul class='key-info'>
+		<li> The API communicates via HTTPS/3 which is secure and fast </li>
+		<li> The API should support HTTPS/1.1 if HTTPS/3 is not available on the client </li>
+		<li> The API is fully RESTful - no state is assumed serverside </li>
+		<li> The API is designed to enforce security and validation on requests </li>
+		<li> The front-end client will implement functionality to send requests and read response data </li>
+		<li> API calls use HTTP GET requests to pseudo-resources </li>
+		<li> Pseudo-resources use RFC 3989's <a class='footnote' href="#foonotes">[1]</a> URI queries </li>
+		<li> This resource lookup style supports easy implementation of serverside and clientside caching </li>
+		<li> In particular, GET is used rather than POST to assist with caching </li>
+		<li> The back-end webserver will implement functionality to handle requests, query the database, marshall data, and return responses </li>
+		<li> Response message bodies are JSON text in formats specified below </li>
+		<li> All responses <b>must</b> include two fields: response-type and api-version </li>
+		<li> The client must ignore responses that do not meet the above requirement </li>
+		<li> Responses include HTTP status codes to indicate errors <a class='footnote' href='#footnotes'>[2]</a> </li>
+		<li> Other error data may also be included within returned JSON </li>
+		<li> Where an error status code is raised, the server should assume that the response body <i>might</i> be ignored by the client </li>
+	</ul>
+	
+	Formatting note: in requests/responses, <em>time</em> should be formatted according to the following rules:
+	<ol>
+		<li> Dates are strings in the format: "YYYY-MM-DDTHH:mm:ssZ", where 'T' indicates beginning of time descriptor and 'Z' indicates "relative to <i>Zulu</i> time" (aka UTC/GMT) </li>
+		<li> Durations are described as JSON Numbers, in MINUTES </li>
+	</ol>
+	This format is a standard <a class='footnote' href='#footnotes'>[3]</a> and has been chosen due to Python and Javascript library support.
+	<br/>
+	<p> Note that <b>all API requests</b> may return a status code of 429 Too Many Requests. This is for DoS protection.</p>
+
+	<p> Note on server <exc>Exception</exc> Handling: when returning an error code, the server should still populate 
+	the body of the message such that the API is RESTful - this means, include the <code>"response-type"</code> and
+	<code>"api-version"</code> properties as well as (potentially invalid) Node IDs or client-defined Datetimes in relevant fields. This means
+	the client is aware what request specifically the error response is referring to.</p>
+
+</div>
+
+<div class='definitions'>
+
+	<table class='data-structures'>
+
+		<tr> 
+			<th> Data Structure </th> <th> Format </th> <th> Notes </th>
+		</tr>
+		<tr>
+			<td> Response (General Format) </td> 
+			<td>
+				<pre>
+<code>
+{
+	"api-version": <em>VERSION</em> as String,
+	"response-type": <em>TYPE</em> as String,
+	... <com> // response body </com>
+}
+</code>
+				</pre>
+			</td> 
+			<td> All server responses must state the API version, currently <em>"1.1.1"</em> and the 
+			type of the response (i.e. which type of API request it corresponds to). Major version increases (the first
+			digit) will be reserved for changes that are considered backwards-incompatible.
+			<ul><li><code>response-type</code> is
+			exactly one of: <code>["map", "timetable", "route", "service", "live-tracking"]</code></li></ul>
+			The version attribute has been omitted in the API below, but users should always include it.
+			</td>
+		</tr>
+		<tr>
+			<td> Geo-Location </td>
+			<td>
+				<pre>
+<code>
+{
+	<com> // example GPS... </com>
+	"lat": 54.054266697674485,
+	"long": -2.8100538254190233
+}
+</code>
+				</pre>
+			</td>
+			<td> A GPS location where latitude/longitude are floats (generally, JSON Numbers). They should be as 
+			high-precision as possible where data is available. Used for stops, user location, etc. </td>
+		<tr>
+			<td> Node </td> 
+			<td> 
+				<pre>
+<code>
+{
+	"id": e.g. "<em>8712938</em>",
+	"type": e.g. "<em>bus</em>",
+	"name": e.g. "<em>Common Garden Street</em>",
+	"location": {... Geo-Location}
+}
+</code>
+				</pre>
+			</td> 
+			<td> Nodes represent a individual transport stop/station of any kind, where:
+				<ul>
+					<li><code>"id"</code> is a unique String ID, assigned by back-end. Consistent across all clients.</li>
+					<li><code>"type"</code> is one of <code>["bus", "train", "tram"]</code> - i.e. what vehicles stop here.</li>
+					<li><code>"name"</code> is the displayed name of the stop.</li>
+					<li><code>"location"</code> is the map GPS of the stop - see Geo-Location.</li>
+				</ul>
+				For performance purposes, the client will only request partial information on nodes initially, waiting until Timetable/Service/Tracking
+				data is required for a specific node before requesting it (lazy loading). The client can then bundle this timetable data with its internal
+				representations of Nodes.
+			</td>
+		</tr>
+		<tr>
+			<td> Timetable </td>
+			<td>
+				<pre>
+<code>
+{
+	"arrivals": [
+		{
+			"time": <em>DATETIME</em> as String,
+			"name": e.g. "<em>1A</em>",
+			"operator": e.g. "<em>Stagecoach</em>",
+			"status": <em>VEHICLE STATUS</em> as String
+		},
+		{
+			... <com> // another arrival listing </com>
+		}
+	],
+	"last-updated": <em>DATETIME</em> as String,
+	"from-time": <em>DATETIME</em> as String,
+	"node": <em>NODE ID</em> as String
+}
+</code>
+				</pre>
+			</td>
+			<td> Timetables have "arrivals" arrays containing a sequence of arrivals for a given node. In practice, they can
+			only be transferred with the explicit context of the node (see API). Each array item is an object where:
+				<ul>
+					<li><code>"time"</code> is the *expected* arrival time of the vehicle (which have been
+					modified serverside if dynamic data for the vehicle is available). See tldr section for formatting note. </li>
+					<li><code>"name"</code> is the service display name.</li>
+					<li><code>"operator"</code> is the operator display name.</li>
+					<li><code>"status"</code> is a String status code that provides info about the listing. It is one of: 
+					<code>["scheduled", "cancelled", "delayed", "on-time", "unknown"] </code>. A scheduled listing may be
+					on-time or delayed, but does not have available tracking data. The server should report cancelled listings to the 
+					client if they are upcoming (in *realtime*) but may choose to omit cancelled listings for timetable lookups 
+					several days in advance. The server should not report a vehicle as delayed unless it is expected to be late by more
+					than a minute.
+					<li><code>"from-time"</code> is the date-time (possibly now) for which this timetable schedule starts at. For example,
+					the user may wish to view the scheduled timetable three days in advance of a journey. This should match a datetime provided
+					in a client request (see TimetableLookup).</li>
+					<li><code>"node"</code> is the node ID for which this timetable is being returned.</li>
+				</ul>
+				
+				The server can decide the total number and start timing of the listings it returns and 
+				should do so in response to API requests. The server <b>must</b> set the <code>"last-updated"</code>
+				parameter to the current time when responding to a timetable request. This ensures the client can
+				flush timetable data and replace it only when necessary.
+			</td>
+		</tr>
+		<tr>
+			<td> Transport Metadata </td>
+			<td><pre>
+<code>
+{
+	"weather": {
+		"weather": <em>WEATHER</em> as String,
+		"location": { ... Geo-Location}
+	}
+	"messages": ["Return tickets are now 10% off", ...],
+	"warnings": ["Roads are icy, take care."]
+}
+</code>
+			</pre></td>
+			<td> Transport Meta is general information relating to transport in Lancashire that 
+			users should know when they open the website, where:
+			<ul>
+				<li><code>"weather"</code> includes exactly one String from <code>["unknown", "clear", "cloudy", "rain", "storm", "snow", "snowstorm"]</code> to represent 
+				the current weather at the given Geo-Location. In practice, the Geo-Location would have been supplied by the user upon connecting. </li>
+				<li><code>"messages"</code> is an array of display String information to prompt the user with. For usability this should be minimal. </li>
+				<li><code>"warnings"</code> is an array of display String warnings relating to danger/general disruption/cancellations that may affect the general user's journey.
+				Note that warnings do not have any context of the user or where they are going - these are county-wide notices.</li>
+			</ul>
+				Messages and warnings may be empty arrays. The client should support all stated weather options, but the server 
+				<b>does not</b> have to be able to send them all if data is not available or applicable.
+			</td>
+		</tr>
+		<tr>
+			<td> Path </td>
+			<td><pre>
+<code>
+{
+	"from": <em>NODE ID</em> as String,
+	"to": <em>NODE ID</em> as String,
+	"path": [<em>Array of Geo-Location objects</em>]
+}
+</code>
+			</pre></td>
+			<td> Path objects describe the path road path between two Nodes. Paths are NOT a route;
+				they are the graphical line that should be drawn (e.g. matching the curvature of the road) on the 
+				client-side map.
+			<ul>
+				<li><code>"from"</code> is a valid node ID that represents where this path starts</li>
+				<li><code>"to"</code> is a valid node ID that represents where this path ends</li>
+				<li><code>"path"</code> is a list of Geo-Location objects (see above), including the start and end locations,
+				that represent the vertices of the path.</li>
+			</ul>
+			
+			The given Nodes should be <b>adjacent</b> - i.e. the graphical path should go via a direct transport link between the nodes.
+			</td>
+		</tr>
+		<tr>
+			<td> Route </td>
+			<td><pre>
+<code>
+{
+	"duration": <em>MINUTES</em> as Number,
+	"type": <em>ROUTE TYPE</em> as String Array,
+	"travel": [
+		{
+			"departure": <em>DATETIME</em> as String,
+			"duration": <em>MINUTES</em> as Number,
+			"node": <em>NODE ID</em> as String,
+			"type": <em>TRANSPORT METHOD</em> as String
+		},
+		{
+			<com> // another leg of the journey (vehicle change) </com>
+		}
+	],
+	"destination": <em>NODE ID</em> as String,
+	"path": [<em>... Array of Path objects</em>]
+}
+</code>
+			</pre></td>
+			<td> Routes describe (one possible) found route between two given Nodes. They include the literal sequence of transport links,
+			and the visual path that should be drawn on the map, as well as a classification for route type.
+			<ul>
+				<li><code>"duration"</code> is the overall time in minutes to travel from source to destination via this route.</li>
+				<li><code>"type"</code> is a classification of this route to indicate to the user, who may prefer different options. Currently
+				supported types are <code>["fastest", "fewest-changes", "least-walking"]</code>. May have one, zero, or more types.</li>
+				<li><code>"travel"</code> is an array of objects representing each "leg" of the journey. Each entry is boarding a new 
+				scheduled vehicle. As such, intermediate stops should <b>not</b> be included in the sequence. Entries can also represent
+				walking between two stops when necessary. There is <b>no entry included for the destination</b>. </li>
+				<ul>
+				<li><code>"departure"</code> is a String Datetime (see tldr formatting note for more info). This is when the vehicle is scheduled to leave, or
+				in the case of walking, when the user is expected to start walking having exited the previous vehicle.</li>
+				<li><code>"duration"</code> is how long in minutes this leg of the journey will take.</li>
+				<li><code>"node"</code> is the String ID of the Node from which this leg of the journey starts.</li>
+				<li><code>"type"</code> is a String representing the method of transport for this leg of the journey, one of <code>["bus", "train", "tram", "walking"]</code></li>
+				</ul>
+				<li><code>"destination"</code> is the String ID of the destination Node that this route leads to.</li>
+				<li><code>"path"</code> is the visual graphical path that should be drawn to represent the route on the map. It is 
+				an array of Path objects (see above). It should be of length <code>"travel".length</code> with a separate path between each node.</li>
+			</ul>
+			</td>
+		</tr>
+		<tr>
+			<td> Vehicle </td>
+			<td><pre>
+<code>
+{
+	"name": e.g. "<em>1A</em>",
+	"location: { <em> ... Geo-Location </em> }
+}
+</code>
+			</pre></td>
+			<td> A live-tracked vehicle that appears on the map. <code>"name"</code> is a displayed 
+			String and <code>"location"</code> is a Geo-Location object matching to the vehicle's live position.</td>
+		</tr>
+	</table>
+	<br/>
+	<table class='api'>
+
+		<tr> 
+			<th> Service & Interface </th> <th> Request </th> <th> Response </th> 
+		</tr>
+		<tr> 
+			<td> MapService </td> 
+			<td> Requests a full set of all Nodes (stops) to display on the map, and extra information (e.g. weather).
+			<p>GET request to</p>
+			<code>/map?lat=<b>number</b>&long=<b>number</b></code><br>
+			Where the lat/long parameters are high-precision floating point numbers that represent the
+			user's current location (to get precise weather data / relevant warnings).
+			<p>OR, (if client has nodes cached locally)</p>
+			<p>GET request to</p>
+			<code>/map?cached=true?lat=<b>number</b>?long=<b>number</b></code><br/>
+			</td>
+			<td> Returns full set of stops/nodes (only surface level data, not timetables) with map metadata.
+				Or, if <code>cached=true</code> is included in the request, <b>only</b> returns the "information" field (no nodes).
+			<pre>
+<code>
+{ 
+
+	"response-type": "map", 
+	"nodes": [<em>... Array of Node objects</em>],
+	"information": {<em>... Transport Metadata object</em>}
+
+}</code></pre>
+			<exc>Exception:</exc> user has requested all nodes 'too much' in past minute (e.g. 10+ times, i.e. a suspected
+			DoS attack or faulty client). <em>Server responds with status code 429.</em><br>
+			<exc>Exception:</exc> latitude or longitude parameters are misformatted or invalid. <em>Server responds with status code 414 or 400.</em>
+			</td>
+		</tr>
+		<tr>
+			<td>TimetableService <b>TimetableLookup</b></td>
+			<td>Requests the Timetable data for a given group of Nodes, which should incorporate dynamic data (e.g. cancellations
+			or delays) when possible. Timetable data is requested <i>from</i> a specific datetime, (e.g. when the user
+			intends to depart. This supports lookups of <b> multiple Nodes at a time </b> for efficiency (reducing the Number
+			of overall requests).
+			<p>GET request to</p>
+			<code>/timetable?time=<b>DATETIME</b>&nodes=<b>ID1</b>,<b>ID2</b>,<b>ID3</b></code><br/>
+			Where the time parameter is a Datetime formatted as in TLDR section. The nodes parameter is a comma-separated list of Node
+			IDs that timetable lookups are required for. In practice, the client should not request more than 10 Timetables
+			in a single GET.
+			</td>
+			<td>
+			Returns full set of Node timetables where possible.
+			<pre>
+<code>
+{
+	"response-type": "timetable",
+	"excluded": [<em> ... Array of Node IDs </em>],
+	"timetables": {<em> ... Object matching Node IDs to Timetable objects </em>},
+}
+</code></pre>
+<pre><com> 
+	// Example timetables field: </com><com>
+	"timetables": {
+		"12389": {<em> Timetable object (see above) for node 12389</em> },
+		"49283": {<em> Timetable object (see above) for node 49283</em> },
+		"88943": {<em> Timetable object (see above) for node 88943</em> }
+	}</com></pre>
+	
+				The server should include ALL IDs specified in the Request in the Response; however, for Node IDs that 
+				were invalid, unauthorised, or otherwise rejected, it should place those IDs in the <code>"excluded"</code>
+				array rather than returning a timetable for them. Even if all nodes are invalid, a success status code should
+				be returned.
+				<p>
+				<exc>Exception:</exc> URI too long to process (too many nodes specified). <em>Server responds with status code 414.</em><br/>
+				<exc>Exception:</exc> DATETIME invalid / bad formatting / unreasonable. <em>Server responds with status code 400.</em></p>
+			</td>
+		</tr>
+		<tr>
+			<td>TimetableService <b>ServiceLookup</b></td>
+			<td>Requests data about the services that run through a particular Node. This includes graphical map paths
+			for those services as well as names.
+			<p>GET request to</p>
+			<code>/services/<b>NODE ID</b></code><br>
+			Where "NODE ID" is the desired Node.
+			
+			</td>
+			<td>Returns data about services that run through a Node. For practical reasons, the server may choose to
+			return no services for some Nodes (e.g. train stations).
+			<pre>
+<code>
+{ 
+	"response-type": "service", 
+	"node": "<em>NODE ID</em>" as String,
+	"services": [
+		{
+			"service-name": e.g. "<em>1A</em>",
+			"path": {<em> ... Path object </em>}
+		}, <com> // ... other services </com>
+	]
+} 
+</code>
+			</pre>
+			<ul>
+			<li><code>path</code> is a Path object (see above) for the overall road/rail route the service takes.</li>
+			</ul>
+			<exc>Exception:</exc> Invalid Node ID. <em>Server responds with status code 404.</em>
+			</td>
+		</tr>
+		<tr>
+			<td>TimetableService <b>LiveTracking</b></td>
+			<td>Requests the map position of vehicles of a particular service going to/from a particular Node.
+			<p> GET request to </p>
+			<code>/tracking/<b>NODE ID</b></code> <br>
+			Where "NODE ID" is the desired Node.
+			</td>
+			<td>Returns a list of all Vehicles somewhat closely approaching the given Node, and any vehicles that
+			have recently departed the Node. Since not all vehicles support tracking, there may be no Vehicles returned
+			in many cases. The server determines which Vehicles are considered close - for example, those within 10 minutes may
+			be considered close in a frequent-traffic bus stop, or those within 30 minutes at a rural stop.
+<pre><code>
+{
+	"response-type": "live-tracking",
+	"node": "<em>NODE ID</em>" as String,
+	"vehicles": [<em> ... Array of Vehicle objects </em>]
+}
+</code></pre>
+			<code>"vehicles"</code> is a list of all relevant Vehicles (which encapsulate tracking data, see above).
+			<p><exc>Exception:</exc> Invalid Node ID. <em>Server responds with status code 404.</em></p>
+			</td>
+		</tr>
+		<tr>
+			<td>RouteService</td>
+			<td>Request a selection of routes between a given source and destination node at a given date and time. 
+				<p>GET request to</p>
+				<code>/routes?source=<b>NODEID</b>&dest=<b>NODEID</b>&time=<b>DATETIME</b></code><br/> 
+				Where "NODEID"-s are valid IDs of the source and destination nodes, and "time" is a String Datetime
+				for when the route scheduling should begin (see TLDR for Datetime specification).
+			</td>
+			<td>Return a selection of routes between the given source and destination. The routing options 
+			computed should, where possible, offer a diverse range of routes reflecting different qualities that
+			align with different user preferences (shortest time, fewest changes, least walking). See Route in the
+			Data Structures above for more info. The amount of routes returned is up to the server and may vary
+			between the same requests (due to dynamic data and serverside performance).
+<pre><code>
+{ 
+	"response-type": "route",
+	"source": "<em>NODE ID</em>" as String,
+	"destination": "<em>NODE ID</em>" as String,
+	"routes": [<em>... Array of relevant Route objects </em>]
+} 
+</code></pre>
+				<p> Note that visual default selection of the “main” path is performed client side based on 
+				preferences given by the user. The server should aim to exclude paths that are strictly worse than 
+				others from its output, e.g. for Underpass to Lancaster Bus Station, now, do not include a 
+				100 that arrives in 15 minutes if there is a 1A in 2 minutes.</p>
+
+				<p><exc>Exception:</exc> Invalid Node ID for source or destination. <em>Server responds with status code 404.</em>
+				<exc>Exception:</exc> Invalid or misformatted Datetime parameter. <em>Server responds with status code 404.</em>
+				<exc>Exception:</exc> Unreasonable Datetime parameter value (e.g. 1970, or 2029). <em>Server responds with status code 422.</em>
+				<exc>Exception:</exc> Not a single route from source to destination could not be found (in reasonable time frame). <em>Server responds with status code 500.</em>
+				</p>
+			
+
+			</td>
+		</tr>
+
+	</table>
+</div>
+
+<div id='footnotes'>
+	<h2> Sources </h2>
+	[1] RFC3986: https://datatracker.ietf.org/doc/html/rfc3986<br/>
+	[2] HTTP Status Codes: https://en.wikipedia.org/wiki/List_of_HTTP_status_codes<br/>
+	[3] ISO8601: https://en.wikipedia.org/wiki/ISO_8601
+</div>
+</body>
+</html>

@@ -1,0 +1,211 @@
+load_data.py Filter Logic & Bug Report
+=======================================
+Leo, 03 / 03 / 2026
+
+Context:
+  - db.py   creates the SQLite schema (25 tables, with FOREIGN KEY constraints)
+  - load_data.py reads CSVs, renames columns, filters rows, inserts into DB
+  - detector.py confirms CSV_BUS internal FK consistency is OK (0 errors)
+  - The filtering in load_data.py exists to satisfy DB constraints the CSVs
+    may violate due to: cross-domain FKs, nullable sentinels (-1, ""),
+    index→code translation failures, or actual bugs.
+
+CSV Source Paths (load_data.py uses OLD preprocessor dirs):
+  NPTG:  dev/preprocessor/nptg_naptan/CSV/
+  BUS:   dev/preprocessor/bus_time_table/EXPERIMENT_CSV/
+
+
+========================================================================
+  1. All Filter Logic in load_data.py  (what it does and why)
+========================================================================
+
+  Table                   Filter                                          Why
+  ----------------------  ----------------------------------------------  --------------------------
+  Authority               drop if parent_index → Region map fails         NOT NULL Reg_code FK
+  District                drop if parent_index → Authority map fails      NOT NULL Aut FK
+  Locality                drop if authority_ref or district_ref map fails  NOT NULL FK
+                          multi-pass insert for self-ref parent_locality   self-FK ordering
+  Stop_Area               drop if lon/lat is NaN                          NOT NULL float columns
+  Stop_Point              keep only if admin_area_code, atco_area_code,   FK filter against DB
+                            LOC_nptg_code exist in DB;
+                          SA_code: null-or-valid check                    nullable FK
+  Bus_Stop_Point          keep only if SP_atco_code exists in Stop_Point  cross-domain FK (bus→nptg)
+  Route_Section           invert index-range from Route → add ROU_UID     db.py expects child→parent
+  Route_Link              invert index-range from Route_Section;          child→parent + FK filter
+                          keep only if RSEC_UID, from/to_SP_atco_code,
+                            from/to_Bus_SP_uid all exist in DB
+  Route_Location          invert index-range from Route_Link;             child→parent + FK filter
+                          keep only if RLIN_UID exists in DB
+  Journey_Pattern         direct rename, no filter                        —
+  JP_Section              invert: JP.JP_section_start/end_uid → add JP_UID child→parent
+  JP_Link                 invert index-range from JP_Section;             child→parent + FK filter
+                          keep only where RLIN_UID and JPS_UID exist
+  Vehicle_Journey         map uid columns through index→uid dict;         nullable sentinel handling
+                          drop rows where required FKs are null
+  Days_Of_Week            keep only where VJ_UID exists in DB             FK filter
+  Special_Days_Op         keep only where VJ_UID exists in DB             FK filter
+  Bank_Holiday_Op         keep only where VJ_UID exists in DB             FK filter
+  Vehicle_Journey_Link    keep only where VJ_UID and JPL_UID exist in DB  FK filter
+
+
+========================================================================
+  2. Run Results  (fresh DB, python3 db.py && python3 load_data.py)
+========================================================================
+
+  Table                    CSV Rows     Loaded     Dropped  Notes
+  -----------------------  ----------   --------   -------  -------------------------
+  Region                   12           12         0        OK
+  Authority                149          149        0        OK
+  District                 298          298        0        OK
+  Locality                 22,857       22,299     558      orphan self-refs (parent
+                                                            locality code not in DB)
+  Stop_Area                75,823       75,823     0        OK
+  Stop_Point               ~215k+       215,182    some     atco/locality FK filter
+  Operator                 9            9          0        OK
+  Garage                   12           12         0        OK
+  Serviced_Organisation    21           21         0        OK
+  Serviced_Org_Date_Range  1,945        1,945      0        OK
+  Service                  513          513        0        OK
+  Line                     660          660        0        OK
+  Route                    2,585        2,585      0        OK
+  Route_Section            10,351       10,351     0        OK
+  Bus_Stop_Point           37,296       33,490     3,806    SP_atco_code not in nptg
+  Route_Link               ~93k         83,559     ~9.9k    cascade from BSP + SP
+  Route_Location           ~3M          2,692,910  ~335k    cascade from Route_Link
+  Journey_Pattern          7,469        7,469      0        OK
+  JP_Section               8,812        8,812      0        OK
+  JP_Link                  ~362k        (filtered  ~46k     NEVER WRITTEN (BUG #1)
+                                        to 315k)
+  Vehicle_Journey          ~39k         38,603     689      -1 garage/DOW → null map
+  Days_Of_Week             38,565       0          ALL      BUG #2: type mismatch
+  Special_Days_Op          13,634       0          ALL      BUG #2: type mismatch
+  Bank_Holiday_Op          38,913       0          ALL      BUG #2: type mismatch
+  Vehicle_Journey_Link     1,554,607    0          ALL      BUG #2 + BUG #1 cascade
+
+
+========================================================================
+  3. Bugs Found  (3 critical)
+========================================================================
+
+  ── BUG #1: JP_Link _to_sql() call is missing ─────────────────────
+
+  Location:  load_data.py, inside the `if jp_link_df is not None` block
+  Symptom:   JP_Link table is always empty in DB
+  Cause:     The code filters jp_link_out, prints its row count, but
+             NEVER calls _to_sql(conn, jp_link_out, 'Journey_Pattern_Link')
+  Cascade:   VJ_Link checks JPL_UID against empty JP_Link table → 0 rows
+
+  Fix:
+    Add after the "Journey_Pattern_Link rows after FK filtering" print:
+        _to_sql(conn, jp_link_out, 'Journey_Pattern_Link')
+
+
+  ── BUG #2: String vs Integer type mismatch kills 4 tables ────────
+
+  Location:  load_data.py, in DOW / SDO / BHO / VJ_Link filter blocks
+  Symptom:   All 4 tables get 0 rows loaded
+  Cause:
+
+    The code does:
+      valid_vj = {r[0] for r in cur.execute("SELECT VJ_UID FROM Vehicle_Journey")}
+      # → returns set of int: {0, 1, 2, ...}
+
+      dow_out["VJ_UID"] = dow_out["VJ_UID"].astype(str).str.strip()
+      # → converts to set of str: {"0", "1", "2", ...}
+
+      dow_out = dow_out[dow_out["VJ_UID"].isin(valid_vj)]
+      # → "0" in {0} is False in Python → ALL rows dropped
+
+    Same pattern repeated for SDO, BHO, and VJ_Link.
+
+  Fix (two options):
+    Option A: Cast valid_vj to str:
+        valid_vj = {str(r[0]) for r in cur.execute("SELECT VJ_UID ...").fetchall()}
+
+    Option B: Don't cast the column to str:
+        # Remove the .astype(str).str.strip() line
+        dow_out["VJ_UID"] = pd.to_numeric(dow_out["VJ_UID"], errors="coerce")
+
+
+  ── BUG #3: Cross-domain FK cascade drops ~10% of bus data ────────
+
+  Location:  Bus_Stop_Point filter
+  Symptom:   3,806 bus stop points dropped, cascading to ~9.9k route links,
+             ~335k route locations, ~46k JP links
+  Cause:     Bus CSV references NaPTAN stop_point_ref (atco_code) values that
+             don't exist in the Stop_Point table.
+             The old NPTG preprocessor produced fewer stop points (215k)
+             than the new preprocessor (435k) — the bus data references
+             stops that the old preprocessor didn't parse/include.
+  Severity:  Data loss, not a code bug. Using the new_preprocessor NPTG data
+             with all 435k stop points would eliminate most of these drops.
+
+
+========================================================================
+  4. CSV vs DB Constraint Mismatches
+========================================================================
+
+  These are places where the CSV data uses conventions that clash with
+  the DB schema constraints, requiring load_data.py to handle them.
+
+  ── 4a. Nullable sentinel -1 vs NOT NULL in db.py ─────────────────
+
+  CSV column                      CSV sentinel    db.py column       DB constraint
+  ------------------------------  -------------   -----------------  ------------------
+  vehicle_journey.garage_uid      -1              GAR_UID            NOT NULL
+  vehicle_journey.days_of_week_uid -1             (→ DOW FK)         VJ has no DOW FK
+  vehicle_journey.so_uid          -1              SO_UID             NULL (ok)
+  vehicle_journey.bho_uid         "" (empty)      (→ BHO FK)         VJ has no BHO FK
+
+  GAR_UID NOT NULL in db.py means 659 rows with garage_uid=-1 cannot be
+  inserted unless:
+    a) db.py changes GAR_UID to nullable, or
+    b) load_data inserts a dummy "unknown" garage, or
+    c) those 659 rows are dropped (current behaviour via mapping failure)
+
+  ── 4b. Index-range → child-stores-parent inversion ───────────────
+
+  CSV stores parent→child via index ranges (start_index, end_index).
+  db.py expects child→parent direct FK.
+  load_data.py correctly inverts 5 of these:
+
+    Route → Route_Section        (route_section_start/end_index)
+    Route_Section → Route_Link   (start/end_route_link_index)
+    Route_Link → Route_Location  (start/end_route_location_index)
+    JP → JP_Section              (JP_section_start/end_uid)
+    JP_Section → JP_Link         (start/end_JP_link_index)
+
+  But does NOT invert:
+    VJ → VJ_Link                 (VJ_link_start/end_index)
+    VJ → Special_Days_Op         (special_days_operation_start/end_index)
+    VJ → Days_Of_Week            (days_of_week_uid — direct, not range)
+    VJ → Bank_Holiday_Op         (bho_uid — direct, not range)
+
+  For VJ_Link and SDO, load_data relies on VJ_UID being stored in the
+  child CSV already (which it is: vjl.parent_VJ_uid, sdo.parent_VJ_uid),
+  so no inversion is needed for those — the CSV already has the FK.
+
+  ── 4c. Locality self-reference ordering ──────────────────────────
+
+  558 localities reference a parent_nptg_locality_ref that doesn't
+  exist in the data at all (not an ordering issue — the parent code
+  truly doesn't exist in the NPTG XML source).
+  load_data handles ordering with multi-pass insert (roots first,
+  then children in rounds). The 558 remaining are genuine orphans.
+
+
+========================================================================
+  5. Summary
+========================================================================
+
+  CSV internal FK integrity:  ✅ PASSED  (detector.py confirms 0 errors)
+
+  Bugs in load_data.py:
+    BUG #1  Missing _to_sql for JP_Link         → JP_Link table empty
+    BUG #2  str/int type mismatch in FK filter   → DOW, SDO, BHO, VJL all empty
+    BUG #3  Old preprocessor has fewer stop pts  → 10% bus data cascade loss
+
+  Impact of the bugs:
+    5 out of 25 tables are completely empty (JP_Link, DOW, SDO, BHO, VJL)
+    These 5 tables contain 1,967,529 rows in the CSV that never reach the DB.
+    All bus scheduling/timetable queries will fail.

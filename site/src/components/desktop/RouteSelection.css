@@ -1,0 +1,224 @@
+.route-selection-container {
+  height: 100%;
+  box-sizing: border-box;
+  background-color: transparent;
+  padding: 16px 14px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.route-selection-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  margin-bottom: 12px;
+}
+
+.route-selection-container h2 {
+  font-size: 0.95rem;
+  margin: 0;
+  color: #163654;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.route-current-summary {
+  border: 1px solid #d4e2f0;
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 12px;
+  background: linear-gradient(140deg, #f3f9ff 0%, #ffffff 100%);
+}
+
+.route-current-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.82rem;
+  margin-bottom: 8px;
+  color: #4c657f;
+}
+
+.route-current-value {
+  flex: 1;
+  text-align: right;
+  color: #1e405f;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.route-current-row:last-child {
+  margin-bottom: 0;
+}
+
+.route-selection-hint {
+  margin-bottom: 16px;
+  font-size: 0.82rem;
+  color: #556f8a;
+  line-height: 1.45;
+}
+
+.route-selection-section {
+  margin-bottom: 14px;
+}
+
+.route-selection-label {
+  display: block;
+  font-size: 0.78rem;
+  color: #4b6580;
+  margin-bottom: 6px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.route-selection-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #c9d8e8;
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 0.84rem;
+  color: #1f3e5d;
+  background-color: #fff;
+}
+
+.route-search-wrapper {
+  position: relative;
+}
+
+.route-selection-search-input {
+  padding-left: 36px;
+}
+
+.route-search-clear {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  color: #6c8199;
+  cursor: pointer;
+  font-size: 0.78rem;
+  line-height: 1;
+  z-index: 2;
+}
+
+.route-search-suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  border: 1px solid #c7d8e8;
+  border-radius: 8px;
+  background-color: #ffffff;
+  z-index: 50;
+  box-shadow: 0 8px 18px rgba(30, 63, 98, 0.16);
+  overflow: hidden;
+}
+
+.route-search-suggestion-item {
+  padding: 8px 10px;
+  font-size: 0.8rem;
+  border-bottom: 1px solid #e3ebf4;
+  cursor: pointer;
+  color: #1f3f5d;
+}
+
+.route-search-suggestion-item:last-child {
+  border-bottom: none;
+}
+
+.route-search-suggestion-item:hover {
+  background-color: #f1f7ff;
+}
+
+.route-map-pick-button {
+  width: 100%;
+  margin-top: 8px;
+  border: 1px solid #c7d8e8;
+  background-color: #ffffff;
+  color: #234767;
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+}
+
+.route-map-pick-button.active {
+  background-color: #e9f5ff;
+  border-color: #2c69a6;
+  color: #1f5b97;
+}
+
+.route-preferences-section {
+  border: 1px solid #d4e2f0;
+  border-radius: 12px;
+  background: linear-gradient(140deg, #f4f9ff 0%, #ffffff 100%);
+  padding: 12px;
+  margin-bottom: 16px;
+  min-height: 190px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.route-preferences-section .route-selection-label {
+  margin-bottom: 2px;
+  font-size: 0.82rem;
+}
+
+.route-preference-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #1f3f5d;
+  border: 1px solid #d4e2f0;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 10px 12px;
+}
+
+.route-preference-item input {
+  width: 20px;
+  height: 20px;
+  accent-color: #1f5b97;
+}
+
+.route-selection-error {
+  font-size: 0.8rem;
+  color: #9f2020;
+  background: #fff1f1;
+  border: 1px solid #f4caca;
+  border-radius: 8px;
+  padding: 9px;
+  margin-bottom: 10px;
+}
+
+.route-selection-button {
+  width: 100%;
+  margin-top: auto;
+  border: 1px solid #2d679e;
+  background: linear-gradient(120deg, #2e71ad 0%, #1e5f98 100%);
+  color: #f7fbff;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.route-selection-button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
