@@ -1,14 +1,14 @@
 FROM node:20-slim
 
-# Install Python 3, pip, and make
+# 1. ADDED 'unzip' to this list
 RUN apt-get update && apt-get install -y --no-install-recommends \
         python3 \
         python3-pip \
         make \
+        unzip \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
-# --break-system-packages is required on Debian Bookworm (PEP 668)
 RUN pip3 install --no-cache-dir --break-system-packages \
     flask \
     flask-cors \
@@ -16,8 +16,12 @@ RUN pip3 install --no-cache-dir --break-system-packages \
     numpy \
     requests
 
-# THE FIX: Copy all the files from your GitHub repo directly into the container's /app/ folder
+# Copy everything from GitHub into the container
 COPY . /app/
+
+# 2. UNZIP THE DATABASE
+# This extracts the .db file directly into the new_database folder
+RUN unzip /app/testing/new/new_database/nptg_naptan.db.zip -d /app/testing/new/new_database/
 
 # Working directory
 WORKDIR /app/testing
