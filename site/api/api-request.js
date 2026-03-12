@@ -96,9 +96,15 @@ if (typeof window !== "undefined") {
 
 function resolveApiBaseUrl() {
 	if (typeof window !== "undefined" && window.location) {
-		const { protocol, hostname } = window.location;
+		const { protocol, hostname, port } = window.location;
 		if (protocol && hostname) {
-			return `${protocol}//${hostname}:8080`;
+			// In development the dev server proxies /api, but the backend runs on
+			// :8080, so keep the explicit port only when running locally.
+			const localPort = port || (protocol === "https:" ? "443" : "80");
+			const isLocal = hostname === "localhost" || hostname === "127.0.0.1";
+			return isLocal
+				? `${protocol}//${hostname}:8080`
+				: `${protocol}//${hostname}`;
 		}
 	}
 	// default to localhost for non-browser environments, e.g. testing

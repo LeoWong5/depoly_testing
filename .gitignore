@@ -11,6 +11,8 @@ front-end/site/node_modules
 
 *.pyc
 
+testing/new/new_preprocessor/DATA/*.json
+
 !dev/webserver/template/fake_data/*.json
 front-end/testing/webserver/template/assets/index-ehrF132Z.css
 front-end/testing/webserver/template/index.html
